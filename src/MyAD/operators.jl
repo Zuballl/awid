@@ -2,7 +2,6 @@ export ScalarOp, BroadcastedOp, forward, back, update!
 
 import Base: +, -, *, /, ^, sin, exp, log
 import Base.Broadcast: broadcasted
-using ..AD: GraphNode, Operator, Constant, Variable
 
 mutable struct ScalarOp{F} <: Operator
     f::F

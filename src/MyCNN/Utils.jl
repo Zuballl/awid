@@ -1,8 +1,3 @@
-module Utils
-
-import ..Models
-import ..Training
-import ..Data
 using Plots
 using Statistics
 using JSON
@@ -11,10 +6,10 @@ export save_model, load_model, plot_training_history, plot_confusion_matrix
 export evaluate_model, visualize_predictions
 
 # Funkcja do zapisywania modelu
-function save_model(model::Models.CNN, path::String)
+function save_model(model::CNN, path::String)
     model_state = Dict(
         "layers" => model.layers,
-        "parameters" => Models.parameters(model)
+        "parameters" => parameters(model)
     )
     
     open(path, "w") do io
@@ -27,14 +22,14 @@ function load_model(path::String)
     model_state = JSON.parsefile(path)
     
     # Stwórz nowy model
-    model = Models.CNN()
+    model = CNN()
     
     # Przywróć parametry
     for (layer, param) in zip(model.layers, model_state["parameters"])
-        if isa(layer, Layers.Conv2D)
+        if isa(layer, Conv2D)
             layer.filters .= param["filters"]
             layer.bias .= param["bias"]
-        elseif isa(layer, Layers.Dense)
+        elseif isa(layer, Dense)
             layer.weights .= param["weights"]
             layer.bias .= param["bias"]
         end
@@ -82,9 +77,9 @@ function plot_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_class
 end
 
 # Funkcja do oceny modelu
-function evaluate_model(model::Models.CNN, X::Array{Float32, 4}, y::Vector{Int})
+function evaluate_model(model::CNN, X::Array{Float32, 4}, y::Vector{Int})
     # Predykcje
-    y_pred = argmax(Models.forward(model, X), dims=1)
+    y_pred = argmax(forward(model, X), dims=1)
     
     # Dokładność
     accuracy = mean(y_pred .== y)
@@ -121,14 +116,14 @@ function evaluate_model(model::Models.CNN, X::Array{Float32, 4}, y::Vector{Int})
 end
 
 # Funkcja do wizualizacji wyników
-function visualize_predictions(model::Models.CNN, X::Array{Float32, 4}, y::Vector{Int}; n_samples=5)
+function visualize_predictions(model::CNN, X::Array{Float32, 4}, y::Vector{Int}; n_samples=5)
     # Losowe próbki
     indices = randperm(length(y))[1:n_samples]
     X_samples = X[indices, :, :, :]
     y_true = y[indices]
     
     # Predykcje
-    y_pred = argmax(Models.forward(model, X_samples), dims=1)
+    y_pred = argmax(forward(model, X_samples), dims=1)
     
     # Wyświetl wyniki
     for i in 1:n_samples
@@ -137,6 +132,4 @@ function visualize_predictions(model::Models.CNN, X::Array{Float32, 4}, y::Vecto
         println("  Predicted: $(y_pred[i])")
         println("  Correct: $(y_true[i] == y_pred[i])")
     end
-end
-
-end # module 
+end 

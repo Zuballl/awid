@@ -1,5 +1,3 @@
-module TensorOps
-
 export pad_input, im2col, col2im
 
 function pad_input(x::Array{Float32, 4}, padding::Tuple{Int, Int})
@@ -16,9 +14,14 @@ function im2col(x::Array{Float32, 4}, kernel_size::Tuple{Int, Int}, stride::Tupl
     batch_size, channels, height, width = size(x)
     kernel_h, kernel_w = kernel_size
     stride_h, stride_w = stride
-    
+    @info "im2col called" batch_size channels height width kernel_h kernel_w stride_h stride_w
     out_height = div(height - kernel_h, stride_h) + 1
     out_width = div(width - kernel_w, stride_w) + 1
+    @info "im2col output shape" out_height out_width
+    if out_height <= 0 || out_width <= 0
+        @warn "im2col: output shape is invalid (out_height=$out_height, out_width=$out_width). Returning empty array."
+        return zeros(Float32, kernel_h * kernel_w * channels, 0)
+    end
     
     col = zeros(Float32, kernel_h * kernel_w * channels, out_height * out_width * batch_size)
     
@@ -43,9 +46,14 @@ function col2im(col::Array{Float32, 2}, x_shape::Tuple{Int, Int, Int, Int},
     batch_size, channels, height, width = x_shape
     kernel_h, kernel_w = kernel_size
     stride_h, stride_w = stride
-    
+    @info "col2im called" batch_size channels height width kernel_h kernel_w stride_h stride_w
     out_height = div(height - kernel_h, stride_h) + 1
     out_width = div(width - kernel_w, stride_w) + 1
+    @info "col2im output shape" out_height out_width
+    if out_height <= 0 || out_width <= 0
+        @warn "col2im: output shape is invalid (out_height=$out_height, out_width=$out_width). Returning zeros."
+        return zeros(Float32, x_shape)
+    end
     
     x = zeros(Float32, x_shape)
     
@@ -63,6 +71,4 @@ function col2im(col::Array{Float32, 2}, x_shape::Tuple{Int, Int, Int, Int},
     end
     
     return x
-end
-
-end # module 
+end 

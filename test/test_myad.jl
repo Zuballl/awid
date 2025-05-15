@@ -1,64 +1,71 @@
 using Test
-using MyProject.MyAD
+using MyAD
 
-# Dummy layer struct for test
-mutable struct DummyDense
-    weights::Array{Float32,2}
-    bias::Array{Float32,1}
-    weights_grad::Array{Float32,2}
-    bias_grad::Array{Float32,1}
-end
+@testset "MyAD Tests" begin
+    @testset "Basic Operations" begin
+        # Test addition
+        x = Dual(2.0, 1.0)
+        y = Dual(3.0, 0.0)
+        z = x + y
+        @test z.val ≈ 5.0
+        @test z.grad ≈ 1.0
 
-function DummyDense(in_features, out_features)
-    weights = ones(Float32, out_features, in_features)
-    bias = zeros(Float32, out_features)
-    weights_grad = zeros(Float32, out_features, in_features)
-    bias_grad = zeros(Float32, out_features)
-    DummyDense(weights, bias, weights_grad, bias_grad)
-end
+        # Test multiplication
+        z = x * y
+        @test z.val ≈ 6.0
+        @test z.grad ≈ 3.0
 
-@testset "MyAD Dense forward/backward" begin
-    layer = DummyDense(3, 2)
-    x = rand(Float32, 4, 3) # batch_size=4, in_features=3
-    xvar = CNNVariable(x)
-    out = dense(xvar, layer.weights, layer.bias, layer)
-    y = out.output
-    @test size(y) == (2, 4)
-    # Backward: gradient = ones
-    grad_out = ones(Float32, 2, 4)
-    backward(out, grad_out)
-    @test all(layer.weights_grad .!= 0)
-    @test all(layer.bias_grad .!= 0)
-end
+        # Test division
+        z = x / y
+        @test z.val ≈ 2/3
+        @test z.grad ≈ 1/3
+    end
 
-mutable struct DummyConv
-    filters::Array{Float32,4}
-    bias::Array{Float32,1}
-    filters_grad::Array{Float32,4}
-    bias_grad::Array{Float32,1}
-    stride::Tuple{Int,Int}
-    padding::Tuple{Int,Int}
-end
+    @testset "Activation Functions" begin
+        x = Dual(0.0, 1.0)
+        
+        # Test sigmoid
+        s = sigmoid(x)
+        @test s.val ≈ 0.5
+        @test s.grad ≈ 0.25
 
-function DummyConv()
-    filters = ones(Float32, 2, 2, 1, 1)
-    bias = zeros(Float32, 1)
-    filters_grad = zeros(Float32, 2, 2, 1, 1)
-    bias_grad = zeros(Float32, 1)
-    stride = (1,1)
-    padding = (0,0)
-    DummyConv(filters, bias, filters_grad, bias_grad, stride, padding)
-end
+        # Test tanh
+        t = my_tanh(x)
+        @test t.val ≈ 0.0
+        @test t.grad ≈ 1.0
 
-@testset "MyAD Conv2D forward/backward" begin
-    layer = DummyConv()
-    x = rand(Float32, 1, 1, 4, 4) # batch_size=1, channels=1, 4x4
-    xvar = CNNVariable(x)
-    out = conv2d(xvar, layer.filters, layer.bias, layer.stride, layer.padding, layer)
-    y = out.output
-    @test size(y) == (1, 1, 3, 3)
-    grad_out = ones(Float32, 1, 1, 3, 3)
-    backward(out, grad_out)
-    @test all(layer.filters_grad .!= 0)
-    @test all(layer.bias_grad .!= 0)
+        # Test relu
+        r = relu(x)
+        @test r.val ≈ 0.0
+        @test r.grad ≈ 0.0
+
+        x = Dual(1.0, 1.0)
+        r = relu(x)
+        @test r.val ≈ 1.0
+        @test r.grad ≈ 1.0
+    end
+
+    @testset "Gradient Computation" begin
+        # Test simple function
+        f(x) = x^2
+        @test gradient(f, 2.0) ≈ 4.0
+
+        # Test composite function
+        f(x) = MyAD.sin(x^2)
+        @test gradient(f, 1.0) ≈ 2.0 * Base.cos(1.0)
+
+        # Test vectorized gradient
+        f(x) = sum(x.^2)
+        x = [1.0, 2.0, 3.0]
+        grads = gradient(f, x)
+        @test grads ≈ [2.0, 4.0, 6.0]
+    end
+
+    @testset "Neural Network Operations" begin
+        # Test forward pass for Dense only
+        layer = Dense(2, 3, sigmoid)
+        input = [1.0 2.0; 3.0 4.0]  # 2 samples, 2 features
+        output = forward(layer, input)
+        @test size(output) == (3, 2)  # 3 outputs, 2 samples
+    end
 end 

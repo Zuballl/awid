@@ -1,8 +1,5 @@
 export topological_sort, forward!, backward!, gradient
 
-using ..AD: GraphNode, Operator, ScalarOp, BroadcastedOp
-using ..AD: forward, back, update!
-
 function visit(nothing, visited, order)
     return
 end

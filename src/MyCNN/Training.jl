@@ -1,9 +1,3 @@
-module CNNTraining
-
-import ..CNNModels
-import ..AD
-import ..CNNLayers
-
 export train_epoch, train, evaluate, cross_entropy_loss
 
 # Funkcja straty
@@ -32,10 +26,10 @@ end
 
 function zero_grad!(model)
     for layer in model.layers
-        if isa(layer, CNNLayers.Conv2D)
+        if isa(layer, Conv2D)
             fill!(layer.filters, 0)
             fill!(layer.bias, 0)
-        elseif isa(layer, CNNLayers.Dense)
+        elseif isa(layer, Dense)
             fill!(layer.weights, 0)
             fill!(layer.bias, 0)
         end
@@ -45,28 +39,28 @@ end
 function get_grads(model)
     grads = []
     for layer in model.layers
-        if isa(layer, CNNLayers.Conv2D)
+        if isa(layer, Conv2D)
             push!(grads, layer.filters_grad, layer.bias_grad)
-        elseif isa(layer, CNNLayers.Dense)
+        elseif isa(layer, Dense)
             push!(grads, layer.weights_grad, layer.bias_grad)
         end
     end
     return grads
 end
 
-function train_epoch(model::CNNModels.CNN, train_loader, learning_rate::Float32, loss_fn)
+function train_epoch(model::CNN, train_loader, learning_rate::Float32, loss_fn)
     total_loss = 0.0
     correct = 0
     total = 0
     
     for (x, y) in train_loader
         # Forward pass przez własny AD
-        out = CNNModels.forward(model, x)
+        out = forward(model, x)
         loss = loss_fn(out.output, y)
         # Wyzeruj gradienty
         zero_grad!(model)
         # Backward przez własny AD
-        AD.backward(out, 1.0f0)
+        backward(out, 1.0f0)
         # Zbierz gradienty
         grads = get_grads(model)
         # Update parametrów (prosty SGD)
@@ -81,7 +75,7 @@ function train_epoch(model::CNNModels.CNN, train_loader, learning_rate::Float32,
     return total_loss / length(train_loader), correct / total
 end
 
-function train(model::CNNModels.CNN, train_loader, val_loader, optimizer, loss_fn;
+function train(model::CNN, train_loader, val_loader, optimizer, loss_fn;
               epochs=10, early_stopping_patience=3, learning_rate=0.001)
     best_val_acc = 0.0
     patience_counter = 0
@@ -102,13 +96,13 @@ function train(model::CNNModels.CNN, train_loader, val_loader, optimizer, loss_f
         if val_acc > best_val_acc
             best_val_acc = val_acc
             patience_counter = 0
-            best_model_state = deepcopy(CNNModels.parameters(model))
+            best_model_state = deepcopy(parameters(model))
         else
             patience_counter += 1
             if patience_counter >= early_stopping_patience
                 println("Early stopping triggered!")
                 # Przywróć najlepszy stan modelu
-                for (param, best_param) in zip(CNNModels.parameters(model), best_model_state)
+                for (param, best_param) in zip(parameters(model), best_model_state)
                     param .= best_param
                 end
                 break
@@ -117,13 +111,13 @@ function train(model::CNNModels.CNN, train_loader, val_loader, optimizer, loss_f
     end
 end
 
-function evaluate(model::CNNModels.CNN, data_loader, loss_fn)
+function evaluate(model::CNN, data_loader, loss_fn)
     total_loss = 0.0
     correct = 0
     total = 0
     
     for (x, y) in data_loader
-        pred = CNNModels.forward(model, x)
+        pred = forward(model, x)
         loss = loss_fn(pred, y)
         
         total_loss += loss
@@ -132,6 +126,4 @@ function evaluate(model::CNNModels.CNN, data_loader, loss_fn)
     end
     
     return total_loss / length(data_loader), correct / total
-end
-
-end # module CNNTraining 
+end 

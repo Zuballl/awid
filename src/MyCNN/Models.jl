@@ -1,13 +1,8 @@
-module CNNModels
-
-import ..CNNLayers
-import ..AD
-
 export CNN, forward, parameters, relu, softmax
 
 # Funkcje aktywacji
-function relu(x::AD.CNNVariable)
-    return AD.relu(x)
+function relu(x)
+    return relu(x)
 end
 
 function softmax(x::Array{Float32, 2})
@@ -20,24 +15,24 @@ struct CNN
     
     function CNN()
         layers = [
-            CNNLayers.Conv2D((3, 3), 1, 32),  # Pierwsza warstwa konwolucyjna
+            Conv2D((3, 3), 1, 32),  # Pierwsza warstwa konwolucyjna
             x -> relu(x),                  # ReLU
-            CNNLayers.MaxPool2D((2, 2)),
-            CNNLayers.Conv2D((3, 3), 32, 64), # Druga warstwa konwolucyjna
+            MaxPool2D((2, 2)),
+            Conv2D((3, 3), 32, 64), # Druga warstwa konwolucyjna
             x -> relu(x),                  # ReLU
-            CNNLayers.MaxPool2D((2, 2)),
-            CNNLayers.Flatten(),
-            CNNLayers.Dense(1600, 128),       # Warstwa gęsta
+            MaxPool2D((2, 2)),
+            Flatten(),
+            Dense(1600, 128),       # Warstwa gęsta
             x -> relu(x),                  # ReLU
-            CNNLayers.Dense(128, 10),         # Warstwa wyjściowa
-            x -> AD.CNNVariable(softmax(x.output), nothing, nothing, nothing)
+            Dense(128, 10),         # Warstwa wyjściowa
+            x -> CNNVariable(softmax(x.output), nothing, nothing, nothing)
         ]
         new(layers)
     end
 end
 
 function forward(model::CNN, x::Array{Float32, 4})
-    x_var = AD.CNNVariable(x)
+    x_var = CNNVariable(x)
     for layer in model.layers
         x_var = layer(x_var)
     end
@@ -47,13 +42,11 @@ end
 function parameters(model::CNN)
     params = []
     for layer in model.layers
-        if isa(layer, CNNLayers.Conv2D)
+        if isa(layer, Conv2D)
             push!(params, layer.filters, layer.bias)
-        elseif isa(layer, CNNLayers.Dense)
+        elseif isa(layer, Dense)
             push!(params, layer.weights, layer.bias)
         end
     end
     return params
-end
-
-end # module CNNModels 
+end 
