@@ -1,39 +1,4 @@
-export GraphNode, Operator, Constant, Variable, CNNVariable
-
-abstract type GraphNode end
-abstract type Operator <: GraphNode end
-
-struct Constant{T} <: GraphNode
-    output::T
-end
-
-mutable struct Variable <: GraphNode
-    output::Any
-    gradient::Any
-    name::String
-    Variable(val; name="?") = new(val, nothing, name)
-end
-
-Base.length(v::Variable) = length(v.output)
-
-mutable struct CNNVariable
-    output::Array{Float32, N} where N
-    grad::Union{Array{Float32, N} where N, Nothing}
-    grad_fn::Union{Function, Nothing}
-    grad_inputs::Union{Vector{CNNVariable}, Nothing}
-end
-
-CNNVariable(output::Array{Float32, N} where N) = CNNVariable(output, nothing, nothing, nothing)
-
-# Allow constructing CNNVariable from a 2D matrix (e.g., after flattening)
-function CNNVariable(x::AbstractMatrix)
-    CNNVariable(reshape(Float32.(x), size(x,1), size(x,2), 1, 1))
-end
-
-# Add size method for CNNVariable
-Base.size(x::CNNVariable) = size(x.output)
-Base.size(x::CNNVariable, dim) = size(x.output, dim)
-
+# Remove type definitions and keep only implementations
 function forward(x::CNNVariable)
     return x
 end
@@ -64,40 +29,29 @@ end
 
 # Operacje na tensorach 4D
 function conv2d(x::CNNVariable, filters::Array{Float32, 4}, bias::Array{Float32, 1}, stride::Tuple{Int, Int}, padding::Tuple{Int, Int}, layer)
-    @info "conv2d input" size_x=size(x.output) size_filters=size(filters) size_bias=size(bias) stride=stride padding=padding
+    @info "conv2d input" size_x=size(x.output) size_filters=size(filters)
     padded_x = pad_input(x.output, padding)
-    @info "conv2d padded_x" size_padded_x=size(padded_x)
     col_x = im2col(padded_x, (size(filters, 1), size(filters, 2)), stride)
-    @info "conv2d col_x" size_col_x=size(col_x)
     filters_reshaped = reshape(filters, :, size(filters, 4))
-    @info "conv2d filters_reshaped" size_filters_reshaped=size(filters_reshaped)
     out = filters_reshaped' * col_x
-    @info "conv2d out (matmul)" size_out=size(out)
     out = out .+ bias
     batch_size = size(x.output, 1)
     out_channels = size(filters, 4)
     out_height = div(size(padded_x, 3) - size(filters, 1), stride[1]) + 1
     out_width = div(size(padded_x, 4) - size(filters, 2), stride[2]) + 1
-    @info "conv2d output shape" batch_size=batch_size out_channels=out_channels out_height=out_height out_width=out_width
     output = reshape(out, batch_size, out_channels, out_height, out_width)
     @info "conv2d output reshaped" size_output=size(output)
     grad_fn = function(grad::Array{Float32, 4})
-        @info "conv2d grad_fn input" size_grad=size(grad)
+        filters_grad = nothing
+        bias_grad = nothing
+        input_grad = nothing
         grad_perm = permutedims(grad, (2, 1, 3, 4))
-        @info "conv2d grad_fn permuted" size_grad_perm=size(grad_perm)
         grad_reshaped = reshape(grad_perm, size(filters, 4), :) # (out_channels, batch_size*out_height*out_width)
-        @info "conv2d grad_fn grad_reshaped" size_grad_reshaped=size(grad_reshaped)
         filters_grad = grad_reshaped * col_x'
-        @info "conv2d grad_fn filters_grad (matmul)" size_filters_grad=size(filters_grad)
         filters_grad = reshape(filters_grad, size(filters))
-        @info "conv2d grad_fn filters_grad reshaped" size_filters_grad_reshaped=size(filters_grad)
         bias_grad = sum(grad, dims=(1,3,4))[:]
-        @info "conv2d grad_fn bias_grad" size_bias_grad=size(bias_grad)
         input_grad = filters_reshaped * grad_reshaped
-        @info "conv2d grad_fn input_grad (matmul)" size_input_grad=size(input_grad)
         input_grad = col2im(input_grad, size(x.output), (size(filters, 1), size(filters, 2)), stride)
-        @info "conv2d grad_fn input_grad col2im" size_input_grad_col2im=size(input_grad)
-        # Zapisz gradienty do pól warstwy
         layer.filters_grad .= filters_grad
         layer.bias_grad .= bias_grad
         return [input_grad]
@@ -180,20 +134,17 @@ function grad(x::CNNVariable)
 end
 
 function dense(x::AbstractArray{Float32,2}, weights::Array{Float32, 2}, bias::Array{Float32, 1}, layer)
-    # x: (batch_size, in_features)
-    output = weights * x' .+ bias
-    output = output  # (out_features, batch_size)
+    # x: (in_features, batch)
+    output = weights * x .+ bias  # (out_features, batch)
     grad_fn = function(grad::Array{Float32, 2})
-        # grad: (out_features, batch_size)
-        weights_grad = grad * x
+        # grad: (out_features, batch)
+        weights_grad = grad * x'
         bias_grad = sum(grad, dims=2)
         input_grad = weights' * grad
-        # Zapisz gradienty do pól warstwy
         layer.weights_grad .= weights_grad
         layer.bias_grad .= bias_grad
-        return [input_grad']
+        return [input_grad]
     end
-    # Zwracamy CNNVariable, żeby zachować spójność z resztą AD
     result = CNNVariable(output, nothing, grad_fn, [])
     return result
 end
@@ -209,67 +160,4 @@ function dense(x::Array{Float32, 4}, weights::Matrix{Float32}, bias::Vector{Floa
     batch_size = size(x, 1)
     x_reshaped = reshape(x, batch_size, :)
     return dense(x_reshaped, weights, bias, layer)
-end
-
-# Helper functions for convolution
-function pad_input(x::Array{Float32, 4}, padding::Tuple{Int, Int})
-    batch_size, channels, height, width = size(x)
-    pad_h, pad_w = padding
-    
-    padded = zeros(Float32, batch_size, channels, height + 2*pad_h, width + 2*pad_w)
-    padded[:, :, pad_h+1:pad_h+height, pad_w+1:pad_w+width] = x
-    
-    return padded
-end
-
-function im2col(x::Array{Float32, 4}, kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
-    batch_size, channels, height, width = size(x)
-    kernel_h, kernel_w = kernel_size
-    stride_h, stride_w = stride
-    
-    out_height = div(height - kernel_h, stride_h) + 1
-    out_width = div(width - kernel_w, stride_w) + 1
-    
-    col = zeros(Float32, kernel_h * kernel_w * channels, batch_size * out_height * out_width)
-    
-    for b in 1:batch_size
-        for h in 1:out_height
-            for w in 1:out_width
-                h_start = (h-1) * stride_h + 1
-                w_start = (w-1) * stride_w + 1
-                
-                patch = x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1]
-                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
-                col[:, col_idx] = vec(patch)
-            end
-        end
-    end
-    
-    return col
-end
-
-function col2im(col::Array{Float32, 2}, x_shape::Tuple{Int, Int, Int, Int}, kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
-    batch_size, channels, height, width = x_shape
-    kernel_h, kernel_w = kernel_size
-    stride_h, stride_w = stride
-    
-    out_height = div(height - kernel_h, stride_h) + 1
-    out_width = div(width - kernel_w, stride_w) + 1
-    
-    x = zeros(Float32, x_shape)
-    
-    for b in 1:batch_size
-        for h in 1:out_height
-            for w in 1:out_width
-                h_start = (h-1) * stride_h + 1
-                w_start = (w-1) * stride_w + 1
-                
-                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
-                patch = reshape(col[:, col_idx], channels, kernel_h, kernel_w)
-                x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1] .+= patch
-            end
-        end
-    end
-    
-    return x
 end

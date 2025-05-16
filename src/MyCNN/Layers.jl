@@ -119,8 +119,8 @@ mutable struct NeuralNetwork
         # Konwertuj wektor na Vector{Union{Conv2D, MaxPool2D, Dense}}
         typed_layers = Vector{Union{Conv2D, MaxPool2D, Dense}}(layers)
         return new(typed_layers, nothing)
-    end
-end
+            end
+        end
 
 function forward(network::NeuralNetwork, input)
     # Store input shape for backward pass
@@ -142,8 +142,8 @@ function backward(network::NeuralNetwork, grad)
     if ndims(grad) == 2
         batch_size = size(grad, 2)
         grad = reshape(grad, size(grad, 1), batch_size, 1, 1)
-    end
-    
+end
+
     # Jeśli gradient ma inny rozmiar niż wejście, wypełnij zerami
     if network.input_shape !== nothing && size(grad) != network.input_shape
         new_grad = zeros(Float32, network.input_shape)
