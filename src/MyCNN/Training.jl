@@ -1,4 +1,8 @@
-export train_epoch, train, evaluate, cross_entropy_loss
+using ..MyAD: CNNVariable
+using Statistics: mean
+using ..MyCNN: NeuralNetwork, Conv2D, Dense
+
+export train_epoch, train, evaluate, cross_entropy_loss, train_step!
 
 # Funkcja straty
 function cross_entropy_loss(pred::Array{Float32, 2}, y::Vector{Int})
@@ -48,7 +52,7 @@ function get_grads(model)
     return grads
 end
 
-function train_epoch(model::CNN, train_loader, learning_rate::Float32, loss_fn)
+function train_epoch(model::NeuralNetwork, train_loader, learning_rate::Float32, loss_fn)
     total_loss = 0.0
     correct = 0
     total = 0
@@ -75,7 +79,7 @@ function train_epoch(model::CNN, train_loader, learning_rate::Float32, loss_fn)
     return total_loss / length(train_loader), correct / total
 end
 
-function train(model::CNN, train_loader, val_loader, optimizer, loss_fn;
+function train(model::NeuralNetwork, train_loader, val_loader, optimizer, loss_fn;
               epochs=10, early_stopping_patience=3, learning_rate=0.001)
     best_val_acc = 0.0
     patience_counter = 0
@@ -111,7 +115,7 @@ function train(model::CNN, train_loader, val_loader, optimizer, loss_fn;
     end
 end
 
-function evaluate(model::CNN, data_loader, loss_fn)
+function evaluate(model::NeuralNetwork, data_loader, loss_fn)
     total_loss = 0.0
     correct = 0
     total = 0
@@ -126,4 +130,48 @@ function evaluate(model::CNN, data_loader, loss_fn)
     end
     
     return total_loss / length(data_loader), correct / total
+end
+
+"""
+    train_step!(model::NeuralNetwork, x::Array{Float32, 4}, y::Vector{Int}; learning_rate=0.01)
+
+Perform one training step on the model.
+"""
+function train_step!(model::NeuralNetwork, x::Array{Float32, 4}, y::Vector{Int}; learning_rate=0.01)
+    # Forward pass
+    output = forward(model, x)
+    
+    # Convert labels to one-hot encoding
+    num_classes = size(output, 1)
+    y_one_hot = zeros(Float32, num_classes, length(y))
+    for (i, label) in enumerate(y)
+        y_one_hot[label, i] = 1.0f0
+    end
+    
+    # Reshape y_one_hot to 4D tensor
+    y_one_hot_4d = reshape(y_one_hot, num_classes, length(y), 1, 1)
+    
+    # Compute loss
+    loss = cross_entropy_loss(output, y_one_hot_4d)
+    
+    # Backward pass
+    grad = ones(Float32, size(output))
+    backward(model, grad)
+    
+    # Update weights
+    for layer in model.layers
+        if isa(layer, Conv2D)
+            layer.filters .-= learning_rate .* layer.filters_grad
+            layer.bias .-= learning_rate .* layer.bias_grad
+            layer.filters_grad .= 0
+            layer.bias_grad .= 0
+        elseif isa(layer, Dense)
+            layer.weights .-= learning_rate .* layer.weights_grad
+            layer.bias .-= learning_rate .* layer.bias_grad
+            layer.weights_grad .= 0
+            layer.bias_grad .= 0
+        end
+    end
+    
+    return loss
 end 

@@ -84,6 +84,6 @@ function gradient(f, xs::AbstractArray)
 end
 
 # Explicitly import Base functions
-import Base: sin, cos, tanh
+import Base: tanh
 
 export Dual, gradient, sigmoid, my_tanh, relu, sin, cos 

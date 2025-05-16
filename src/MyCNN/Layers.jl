@@ -1,5 +1,4 @@
-using ..MyAD: CNNVariable
-import ..AD
+using ..MyAD: CNNVariable, conv2d, maxpool2d, flatten, dense, pad_input, im2col, col2im
 
 export Conv2D, MaxPool2D, Flatten, Dense
 
@@ -53,98 +52,24 @@ struct Dense
     end
 end
 
-# Funkcje pomocnicze dla Conv2D
-function pad_input(x::Array{Float32, 4}, padding::Tuple{Int, Int})
-    batch_size, channels, height, width = size(x)
-    padded_height = height + 2 * padding[1]
-    padded_width = width + 2 * padding[2]
-    
-    padded = zeros(Float32, batch_size, channels, padded_height, padded_width)
-    padded[:, :, padding[1]+1:padding[1]+height, padding[2]+1:padding[2]+width] = x
-    return padded
-end
-
-function im2col(x::Array{Float32, 4}, kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
-    batch_size, channels, height, width = size(x)
-    kernel_h, kernel_w = kernel_size
-    stride_h, stride_w = stride
-    
-    out_height = div(height - kernel_h, stride_h) + 1
-    out_width = div(width - kernel_w, stride_w) + 1
-    
-    if out_height <= 0 || out_width <= 0
-        @warn "im2col: output shape is invalid (out_height=$out_height, out_width=$out_width). Returning empty array."
-        return zeros(Float32, kernel_h * kernel_w * channels, 0)
-    end
-    
-    col = zeros(Float32, kernel_h * kernel_w * channels, out_height * out_width * batch_size)
-    
-    for b in 1:batch_size
-        for h in 1:out_height
-            for w in 1:out_width
-                h_start = (h-1) * stride_h + 1
-                w_start = (w-1) * stride_w + 1
-                
-                patch = x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1]
-                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
-                col[:, col_idx] = vec(patch)
-            end
-        end
-    end
-    
-    return col
-end
-
-function col2im(col::Array{Float32, 2}, x_shape::Tuple{Int, Int, Int, Int}, 
-                kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
-    batch_size, channels, height, width = x_shape
-    kernel_h, kernel_w = kernel_size
-    stride_h, stride_w = stride
-    
-    out_height = div(height - kernel_h, stride_h) + 1
-    out_width = div(width - kernel_w, stride_w) + 1
-    
-    if out_height <= 0 || out_width <= 0
-        @warn "col2im: output shape is invalid (out_height=$out_height, out_width=$out_width). Returning zeros."
-        return zeros(Float32, x_shape)
-    end
-    
-    x = zeros(Float32, x_shape)
-    
-    for b in 1:batch_size
-        for h in 1:out_height
-            for w in 1:out_width
-                h_start = (h-1) * stride_h + 1
-                w_start = (w-1) * stride_w + 1
-                
-                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
-                patch = reshape(col[:, col_idx], channels, kernel_h, kernel_w)
-                x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1] = patch
-            end
-        end
-    end
-    
-    return x
-end
-
 # Forward pass dla Conv2D
 function (layer::Conv2D)(x::CNNVariable)
-    return MyAD.conv2d(x, layer.filters, layer.bias, layer.stride, layer.padding, layer)
+    return conv2d(x, layer.filters, layer.bias, layer.stride, layer.padding, layer)
 end
 
 # Forward pass dla MaxPool2D
 function (layer::MaxPool2D)(x::CNNVariable)
-    return MyAD.maxpool2d(x, layer.kernel_size, layer.stride)
+    return maxpool2d(x, layer.kernel_size, layer.stride)
 end
 
 # Forward pass dla Flatten
 function (layer::Flatten)(x::CNNVariable)
-    return MyAD.flatten(x)
+    return flatten(x)
 end
 
 # Forward pass dla Dense
 function (layer::Dense)(x::CNNVariable)
-    return MyAD.dense(x, layer.weights, layer.bias, layer)
+    return dense(x, layer.weights, layer.bias, layer)
 end
 
 # Forward pass for Dense with Matrix{Float64} input (for tests)
@@ -153,4 +78,81 @@ function forward(layer::Dense, input::Matrix{Float64})
     x_var = CNNVariable(input32)
     out = layer(x_var)
     return out.output
+end
+
+# Forward pass for Conv2D with Array{Float32,4} input (for tests)
+function forward(layer::Conv2D, input::Array{Float32,4})
+    return layer(CNNVariable(input))
+end
+
+# Forward pass for MaxPool2D with Array{Float32,4} input (for tests)
+function forward(layer::MaxPool2D, input::Array{Float32,4})
+    return layer(CNNVariable(input))
+end
+
+# Forward pass for Flatten with Array{Float32,4} input (for tests)
+function forward(layer::Flatten, input::Array{Float32,4})
+    return layer(CNNVariable(input))
+end
+
+# Forward pass for CNNVariable inputs
+function forward(layer::Union{Conv2D, MaxPool2D, Flatten, Dense}, x::CNNVariable)
+    return layer(x)
+end
+
+# Backward pass for all layers
+function backward(layer::Union{Conv2D, MaxPool2D, Flatten, Dense}, grad::Union{Array{Float32, 4}, Matrix{Float32}})
+    # Konwertuj gradient na CNNVariable
+    grad_var = CNNVariable(grad)
+    # Wywołaj backward na CNNVariable
+    backward(grad_var, grad)
+    # Zwróć gradient wejściowy
+    return grad_var.grad
+end
+
+# Neural Network definition
+mutable struct NeuralNetwork
+    layers::Vector{Union{Conv2D, MaxPool2D, Dense}}  # Vector of layers
+    input_shape::Union{Tuple{Int, Int, Int, Int}, Nothing}  # Store input shape
+    
+    function NeuralNetwork(layers::Vector)
+        # Konwertuj wektor na Vector{Union{Conv2D, MaxPool2D, Dense}}
+        typed_layers = Vector{Union{Conv2D, MaxPool2D, Dense}}(layers)
+        return new(typed_layers, nothing)
+    end
+end
+
+function forward(network::NeuralNetwork, input)
+    # Store input shape for backward pass
+    network.input_shape = size(input)
+    x = input
+    for layer in network.layers
+        x = forward(layer, x)
+    end
+    return x
+end
+
+function backward(network::NeuralNetwork, grad)
+    # Propagate gradient backward through all layers
+    for layer in reverse(network.layers)
+        grad = backward(layer, grad)
+    end
+    
+    # Jeśli gradient jest macierzą, konwertuj go na tensor 4D
+    if ndims(grad) == 2
+        batch_size = size(grad, 2)
+        grad = reshape(grad, size(grad, 1), batch_size, 1, 1)
+    end
+    
+    # Jeśli gradient ma inny rozmiar niż wejście, wypełnij zerami
+    if network.input_shape !== nothing && size(grad) != network.input_shape
+        new_grad = zeros(Float32, network.input_shape)
+        # Kopiuj wartości z gradientu do nowego tensora
+        for i in 1:min(length(grad), length(new_grad))
+            new_grad[i] = grad[i]
+        end
+        grad = new_grad
+    end
+    
+    return grad
 end 

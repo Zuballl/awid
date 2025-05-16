@@ -25,6 +25,15 @@ end
 
 CNNVariable(output::Array{Float32, N} where N) = CNNVariable(output, nothing, nothing, nothing)
 
+# Allow constructing CNNVariable from a 2D matrix (e.g., after flattening)
+function CNNVariable(x::AbstractMatrix)
+    CNNVariable(reshape(Float32.(x), size(x,1), size(x,2), 1, 1))
+end
+
+# Add size method for CNNVariable
+Base.size(x::CNNVariable) = size(x.output)
+Base.size(x::CNNVariable, dim) = size(x.output, dim)
+
 function forward(x::CNNVariable)
     return x
 end
@@ -42,6 +51,15 @@ function backward(x::CNNVariable, grad::Array{Float32, 4})
             backward(input, input_grad)
         end
     end
+end
+
+# Add backward method for Matrix{Float32} gradient
+function backward(x::CNNVariable, grad::Matrix{Float32})
+    # Reshape gradient to 4D tensor
+    batch_size = size(grad, 2)
+    grad_4d = reshape(grad, size(grad, 1), batch_size, 1, 1)
+    # Call backward with 4D gradient
+    backward(x, grad_4d)
 end
 
 # Operacje na tensorach 4D
@@ -183,4 +201,12 @@ end
 # Add this method to support dense(CNNVariable, ...)
 function dense(x::CNNVariable, weights::Matrix{Float32}, bias::Vector{Float32}, layer)
     return dense(x.output, weights, bias, layer)
+end
+
+# Add this method to support dense(Array{Float32, 4}, ...)
+function dense(x::Array{Float32, 4}, weights::Matrix{Float32}, bias::Vector{Float32}, layer)
+    # Reshape input to 2D matrix
+    batch_size = size(x, 1)
+    x_reshaped = reshape(x, batch_size, :)
+    return dense(x_reshaped, weights, bias, layer)
 end

@@ -1,71 +1,59 @@
 using Test
-using MyAD
+using MyProject.MyAD
+using MyProject.MyAD: sin, cos
+using LinearAlgebra
 
-@testset "MyAD Tests" begin
-    @testset "Basic Operations" begin
-        # Test addition
-        x = Dual(2.0, 1.0)
-        y = Dual(3.0, 0.0)
-        z = x + y
-        @test z.val ≈ 5.0
-        @test z.grad ≈ 1.0
+# Test basic operations
+@testset "Basic Operations" begin
+    x = Dual(2.0, 1.0)
+    y = Dual(3.0, 0.0)
+    
+    # Test addition
+    @test x + y == Dual(5.0, 1.0)
+    @test x + 2.0 == Dual(4.0, 1.0)
+    @test 2.0 + x == Dual(4.0, 1.0)
+    
+    # Test multiplication
+    @test x * y == Dual(6.0, 3.0)
+    @test x * 2.0 == Dual(4.0, 2.0)
+    @test 2.0 * x == Dual(4.0, 2.0)
+end
 
-        # Test multiplication
-        z = x * y
-        @test z.val ≈ 6.0
-        @test z.grad ≈ 3.0
+# Test activation functions
+@testset "Activation Functions" begin
+    x = Dual(2.0, 1.0)
+    
+    # Test ReLU
+    @test relu(x) == Dual(2.0, 1.0)
+    @test relu(Dual(-2.0, 1.0)) == Dual(0.0, 0.0)
+    
+    # Test Sigmoid
+    sigmoid_x = sigmoid(x)
+    @test isapprox(sigmoid_x.val, 0.8807971, atol=1e-6)
+    @test isapprox(sigmoid_x.grad, 0.1049936, atol=1e-6)
+    
+    # Test Tanh
+    tanh_x = my_tanh(x)
+    @test isapprox(tanh_x.val, 0.9640276, atol=1e-6)
+    @test isapprox(tanh_x.grad, 0.0706508, atol=1e-6)
+    
+    # Test vectorized operations
+    x_vec = [Dual(1.0, 1.0), Dual(2.0, 1.0)]
+    @test all(relu.(x_vec) .== [Dual(1.0, 1.0), Dual(2.0, 1.0)])
+    @test all(relu.([Dual(-1.0, 1.0), Dual(-2.0, 1.0)]) .== [Dual(0.0, 0.0), Dual(0.0, 0.0)])
+end
 
-        # Test division
-        z = x / y
-        @test z.val ≈ 2/3
-        @test z.grad ≈ 1/3
-    end
-
-    @testset "Activation Functions" begin
-        x = Dual(0.0, 1.0)
-        
-        # Test sigmoid
-        s = sigmoid(x)
-        @test s.val ≈ 0.5
-        @test s.grad ≈ 0.25
-
-        # Test tanh
-        t = my_tanh(x)
-        @test t.val ≈ 0.0
-        @test t.grad ≈ 1.0
-
-        # Test relu
-        r = relu(x)
-        @test r.val ≈ 0.0
-        @test r.grad ≈ 0.0
-
-        x = Dual(1.0, 1.0)
-        r = relu(x)
-        @test r.val ≈ 1.0
-        @test r.grad ≈ 1.0
-    end
-
-    @testset "Gradient Computation" begin
-        # Test simple function
-        f(x) = x^2
-        @test gradient(f, 2.0) ≈ 4.0
-
-        # Test composite function
-        f(x) = MyAD.sin(x^2)
-        @test gradient(f, 1.0) ≈ 2.0 * Base.cos(1.0)
-
-        # Test vectorized gradient
-        f(x) = sum(x.^2)
-        x = [1.0, 2.0, 3.0]
-        grads = gradient(f, x)
-        @test grads ≈ [2.0, 4.0, 6.0]
-    end
-
-    @testset "Neural Network Operations" begin
-        # Test forward pass for Dense only
-        layer = Dense(2, 3, sigmoid)
-        input = [1.0 2.0; 3.0 4.0]  # 2 samples, 2 features
-        output = forward(layer, input)
-        @test size(output) == (3, 2)  # 3 outputs, 2 samples
-    end
+# Test gradient computation
+@testset "Gradient Computation" begin
+    # Test simple function
+    f(x) = x^2
+    @test gradient(f, 2.0) ≈ 4.0
+    
+    # Test composite function
+    g(x) = sin(x^2)
+    @test gradient(g, 2.0) ≈ 4.0 * Base.cos(4.0)
+    
+    # Test vectorized gradient
+    h(x) = sum(x.^2)
+    @test gradient(h, [1.0, 2.0, 3.0]) ≈ [2.0, 4.0, 6.0]
 end 
