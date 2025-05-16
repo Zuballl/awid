@@ -1,6 +1,6 @@
 using Test
 using MyProject.MyAD
-using MyProject.MyAD: sin, cos
+using MyProject.MyAD: sin, cos, Dual, relu, sigmoid, my_tanh, gradient
 using LinearAlgebra
 
 # Test basic operations

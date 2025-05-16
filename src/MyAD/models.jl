@@ -210,3 +210,66 @@ function dense(x::Array{Float32, 4}, weights::Matrix{Float32}, bias::Vector{Floa
     x_reshaped = reshape(x, batch_size, :)
     return dense(x_reshaped, weights, bias, layer)
 end
+
+# Helper functions for convolution
+function pad_input(x::Array{Float32, 4}, padding::Tuple{Int, Int})
+    batch_size, channels, height, width = size(x)
+    pad_h, pad_w = padding
+    
+    padded = zeros(Float32, batch_size, channels, height + 2*pad_h, width + 2*pad_w)
+    padded[:, :, pad_h+1:pad_h+height, pad_w+1:pad_w+width] = x
+    
+    return padded
+end
+
+function im2col(x::Array{Float32, 4}, kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
+    batch_size, channels, height, width = size(x)
+    kernel_h, kernel_w = kernel_size
+    stride_h, stride_w = stride
+    
+    out_height = div(height - kernel_h, stride_h) + 1
+    out_width = div(width - kernel_w, stride_w) + 1
+    
+    col = zeros(Float32, kernel_h * kernel_w * channels, batch_size * out_height * out_width)
+    
+    for b in 1:batch_size
+        for h in 1:out_height
+            for w in 1:out_width
+                h_start = (h-1) * stride_h + 1
+                w_start = (w-1) * stride_w + 1
+                
+                patch = x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1]
+                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
+                col[:, col_idx] = vec(patch)
+            end
+        end
+    end
+    
+    return col
+end
+
+function col2im(col::Array{Float32, 2}, x_shape::Tuple{Int, Int, Int, Int}, kernel_size::Tuple{Int, Int}, stride::Tuple{Int, Int})
+    batch_size, channels, height, width = x_shape
+    kernel_h, kernel_w = kernel_size
+    stride_h, stride_w = stride
+    
+    out_height = div(height - kernel_h, stride_h) + 1
+    out_width = div(width - kernel_w, stride_w) + 1
+    
+    x = zeros(Float32, x_shape)
+    
+    for b in 1:batch_size
+        for h in 1:out_height
+            for w in 1:out_width
+                h_start = (h-1) * stride_h + 1
+                w_start = (w-1) * stride_w + 1
+                
+                col_idx = (b-1) * out_height * out_width + (h-1) * out_width + w
+                patch = reshape(col[:, col_idx], channels, kernel_h, kernel_w)
+                x[b, :, h_start:h_start+kernel_h-1, w_start:w_start+kernel_w-1] .+= patch
+            end
+        end
+    end
+    
+    return x
+end
